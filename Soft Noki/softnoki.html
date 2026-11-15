@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Soft Noki</title>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="soft.css">
+</head>
+<body>
+  <div class="app">
+    <aside>
+      <div class="top">
+        <h1>Soft Noki</h1>
+        <button id="new">New note</button>
+      </div>
+      <input class="search" id="q" placeholder="Search notes" aria-label="Search notes">
+      <div class="list" id="list"></div>
+    </aside>
+
+    <main>
+      <!-- cute Saturn floating inside the writing page -->
+      <div class="sky" aria-hidden="true">
+        <i style="--x:12%;--y:14%;--d:0s"></i>
+        <i style="--x:86%;--y:10%;--d:1.1s"></i>
+        <i style="--x:48%;--y:22%;--d:2.3s"></i>
+        <i style="--x:92%;--y:46%;--d:0.7s"></i>
+        <i style="--x:8%;--y:62%;--d:1.9s"></i>
+        <i style="--x:55%;--y:78%;--d:2.8s"></i>
+        <i style="--x:30%;--y:92%;--d:1.4s"></i>
+        <i style="--x:70%;--y:34%;--d:0.4s"></i>
+        <i style="--x:24%;--y:40%;--d:2.5s"></i>
+        <i style="--x:80%;--y:66%;--d:1.6s"></i>
+        <i style="--x:64%;--y:92%;--d:0.2s"></i>
+        <div class="system">
+          <span class="ring back"></span>
+          <div class="planet"></div>
+          <span class="ring front"></span>
+          <span class="mx"><span class="my moon"></span></span>
+          <span class="mx m2"><span class="my moon"></span></span>
+        </div>
+      </div>
+
+      <div class="bar">
+        <div class="swatch" id="swatch" aria-label="Note shade"></div>
+        <div class="status" id="status">Saved</div>
+        <button class="ghost" id="del">Delete</button>
+      </div>
+      <input class="title" id="title" placeholder="Title" aria-label="Note title">
+      <textarea id="body" placeholder="Start writing here…" aria-label="Note body"></textarea>
+    </main>
+  </div>
+
+  <!-- Saving a note needs a few lines of JavaScript. HTML and CSS alone cannot store anything. -->
+  <script>
+    var KEY = 'soft-noki-notes', notes = [], cur = null, timer = null;
+    var $ = function (id) { return document.getElementById(id); };
+    var list = $('list'), title = $('title'), body = $('body'), status = $('status'), q = $('q');
+
+    function load() {
+      try {
+        var raw = localStorage.getItem(KEY);
+        if (raw) { var d = JSON.parse(raw); if (Array.isArray(d)) notes = d; }
+      } catch (e) {}
+    }
+    function persist() {
+      try { localStorage.setItem(KEY, JSON.stringify(notes)); status.textContent = 'Saved'; }
+      catch (e) { status.textContent = 'Could not save in this browser'; }
+    }
+    function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+    function find(id) { for (var i = 0; i < notes.length; i++) if (notes[i].id === id) return notes[i]; return null; }
+    function newest() { return notes.slice().sort(function (a, b) { return b.t - a.t; }); }
+    function ago(t) {
+      var s = Math.floor((Date.now() - t) / 1000);
+      if (s < 60) return 'just now';
+      if (s < 3600) return Math.floor(s / 60) + ' min ago';
+      if (s < 86400) return Math.floor(s / 3600) + ' hr ago';
+      return new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    }
+
+    function renderSwatch() {
+      var s = $('swatch'); s.innerHTML = '';
+      for (var i = 0; i < 5; i++) {
+        (function (i) {
+          var d = document.createElement('i');
+          d.style.background = 'var(--c' + i + ')';
+          if (cur && cur.c === i) d.className = 'on';
+          d.title = 'Shade ' + (i + 1);
+          d.onclick = function () { if (!cur) return; cur.c = i; touch(); renderSwatch(); renderList(); };
+          s.appendChild(d);
+        })(i);
+      }
+    }
+
+    function renderList() {
+      var term = q.value.trim().toLowerCase(), shown = 0;
+      list.innerHTML = '';
+      newest().forEach(function (n) {
+        if (term && (n.title + ' ' + n.body).toLowerCase().indexOf(term) < 0) return;
+        shown++;
+        var el = document.createElement('div');
+        el.className = 'note' + (cur && cur.id === n.id ? ' active' : '');
+        el.tabIndex = 0;
+        el.style.background = 'var(--c' + n.c + ')';
+        var b = document.createElement('b'); b.textContent = n.title || 'Untitled';
+        var p = document.createElement('span'); p.textContent = n.body.split('\n')[0] || 'No text yet';
+        var m = document.createElement('small'); m.textContent = ago(n.t);
+        el.appendChild(b); el.appendChild(p); el.appendChild(m);
+        el.onclick = function () { open(n.id); };
+        el.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(n.id); } };
+        list.appendChild(el);
+      });
+      if (!shown) {
+        var e = document.createElement('div'); e.className = 'empty';
+        e.textContent = term ? 'No notes match your search.' : 'No notes yet. Press New note to start.';
+        list.appendChild(e);
+      }
+    }
+
+    function open(id) {
+      cur = find(id);
+      title.value = cur ? cur.title : '';
+      body.value = cur ? cur.body : '';
+      renderSwatch(); renderList();
+    }
+    function touch() {
+      if (!cur) return;
+      cur.t = Date.now(); status.textContent = 'Saving…';
+      clearTimeout(timer);
+      timer = setTimeout(function () { persist(); renderList(); }, 400);
+    }
+    function create() {
+      var n = { id: uid(), title: '', body: '', c: notes.length % 5, t: Date.now() };
+      notes.push(n); persist(); open(n.id); title.focus();
+    }
+
+    title.addEventListener('input', function () { if (!cur) create(); cur.title = title.value; touch(); });
+    body.addEventListener('input', function () { if (!cur) create(); cur.body = body.value; touch(); });
+    q.addEventListener('input', renderList);
+    $('new').onclick = create;
+    $('del').onclick = function () {
+      if (!cur || !confirm('Delete this note?')) return;
+      notes = notes.filter(function (n) { return n.id !== cur.id; });
+      persist();
+      var next = newest()[0];
+      if (next) open(next.id);
+      else { cur = null; title.value = ''; body.value = ''; renderSwatch(); renderList(); }
+    };
+
+    load();
+    if (!notes.length) {
+      notes.push({ id: uid(), title: 'Welcome to Soft Noki', c: 0, t: Date.now(),
+        body: 'Everything you type saves automatically in this browser.\nPick a green shade above to color-code a note.' });
+      persist();
+    }
+    open(newest()[0].id);
+    setInterval(renderList, 60000);
+  </script>
+</body>
+</html>
